@@ -16,7 +16,7 @@ jobs:
         with:
           python-version: '3.11'
 
-      - name: Setup Java (Requis pour compiler du Android)
+      - name: Setup Java
         uses: actions/setup-java@v4
         with:
           distribution: 'zulu'
@@ -33,11 +33,10 @@ jobs:
 
       - name: Build APK
         run: |
-          # On force le chemin d'accès au cas où
-          export PATH="$PATH:$FLUTTER_ROOT/bin"
-          
-          # On lance le build sans spécifier main.py à la fin
-          flet build apk --skip-flutter-doctor
+          # On ajoute --yes pour répondre automatiquement "OUI" aux questions d'installation
+          flet build apk --yes --skip-flutter-doctor
+        env:
+          CI: "true" # Cette variable force souvent les outils à rester non-interactifs
 
       - name: Upload APK
         uses: actions/upload-artifact@v4
