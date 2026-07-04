@@ -16,22 +16,37 @@ jobs:
         with:
           python-version: '3.11'
 
+      - name: Setup Java (Requis pour compiler du Android)
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'zulu'
+          java-version: '17'
+
+      - name: Setup Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          channel: 'stable'
+
       - name: Install Dependencies
         run: |
-          sudo apt-get update
-          sudo apt-get install -y curl unzip git
           pip install flet
 
-      - name: Build APK
+      - name: Create Flutter Project & Build
         run: |
-          # Création forcée du dossier de cache où Flet cherche/installe Flutter
-          mkdir -p $HOME/.flet/bin
+          # 1. On demande à Flet de générer le projet Flutter natif (sans lancer le build apk lourd)
+          flet pack main.py --output build_flutter
           
-          # Compilation
-          flet build apk
+          # 2. On entre dans le projet Flutter généré
+          cd build_flutter
+          
+          # 3. On récupère les paquets Flutter requis
+          flutter pub get
+          
+          # 4. C'est Flutter qui compile l'APK directement !
+          flutter build apk --release
 
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
           name: app-release-apk
-          path: build/apk/*.apk
+          path: build_flutter/build/app/outputs/flutter-apk/app-release.apk
