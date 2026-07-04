@@ -22,19 +22,12 @@ jobs:
           sudo apt-get install -y curl unzip git
           pip install flet
 
-      - name: Download Flutter and Build APK
+      - name: Build APK
         run: |
-          # 1. Téléchargement de Flutter dans le dossier courant
-          git clone https://github.com/flutter/flutter.git -b stable --depth 1 $GITHUB_WORKSPACE/flutter
+          # Création forcée du dossier de cache où Flet cherche/installe Flutter
+          mkdir -p $HOME/.flet/bin
           
-          # 2. Ajout STRICT de Flutter au PATH pour cette session de terminal
-          export PATH="$GITHUB_WORKSPACE/flutter/bin:$PATH"
-          export FLUTTER_ROOT="$GITHUB_WORKSPACE/flutter"
-          
-          # 3. Vérification que la commande 'flutter' répond bien
-          flutter --version
-          
-          # 4. Compilation de l'APK
+          # Compilation
           flet build apk
 
       - name: Upload APK
