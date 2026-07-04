@@ -16,15 +16,16 @@ jobs:
         with:
           python-version: '3.11'
 
-      - name: Setup Flutter
-        uses: subosito/flutter-action@v2
-        with:
-          channel: 'stable'
-
-      - name: Expose Flutter to Environment
+      - name: Install Android SDK tools
         run: |
-          echo "$FLUTTER_ROOT/bin" >> $GITHUB_PATH
-          echo "FLUTTER_ROOT=$FLUTTER_ROOT" >> $GITHUB_ENV
+          sudo apt-get update
+          sudo apt-get install -y curl unzip git
+
+      - name: Install Flutter SDK (Manually)
+        run: |
+          git clone https://github.com/flutter/flutter.git -b stable --depth 1 $HOME/flutter
+          echo "$HOME/flutter/bin" >> $GITHUB_PATH
+          echo "FLUTTER_ROOT=$HOME/flutter" >> $GITHUB_ENV
 
       - name: Install Flet
         run: |
@@ -32,6 +33,10 @@ jobs:
 
       - name: Build APK
         run: |
+          # On s'assure que Flutter est bien initialisé
+          $HOME/flutter/bin/flutter doctor
+          
+          # Lancement du build Flet
           flet build apk
 
       - name: Upload APK
