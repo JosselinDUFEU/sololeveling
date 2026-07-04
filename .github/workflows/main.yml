@@ -16,27 +16,25 @@ jobs:
         with:
           python-version: '3.11'
 
-      - name: Install Android SDK tools
+      - name: Install Dependencies
         run: |
           sudo apt-get update
           sudo apt-get install -y curl unzip git
-
-      - name: Install Flutter SDK (Manually)
-        run: |
-          git clone https://github.com/flutter/flutter.git -b stable --depth 1 $HOME/flutter
-          echo "$HOME/flutter/bin" >> $GITHUB_PATH
-          echo "FLUTTER_ROOT=$HOME/flutter" >> $GITHUB_ENV
-
-      - name: Install Flet
-        run: |
           pip install flet
 
-      - name: Build APK
+      - name: Download Flutter and Build APK
         run: |
-          # On s'assure que Flutter est bien initialisé
-          $HOME/flutter/bin/flutter doctor
+          # 1. Téléchargement de Flutter dans le dossier courant
+          git clone https://github.com/flutter/flutter.git -b stable --depth 1 $GITHUB_WORKSPACE/flutter
           
-          # Lancement du build Flet
+          # 2. Ajout STRICT de Flutter au PATH pour cette session de terminal
+          export PATH="$GITHUB_WORKSPACE/flutter/bin:$PATH"
+          export FLUTTER_ROOT="$GITHUB_WORKSPACE/flutter"
+          
+          # 3. Vérification que la commande 'flutter' répond bien
+          flutter --version
+          
+          # 4. Compilation de l'APK
           flet build apk
 
       - name: Upload APK
