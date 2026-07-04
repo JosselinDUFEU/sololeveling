@@ -31,12 +31,16 @@ jobs:
         run: |
           pip install flet
 
-      - name: Build APK
+      - name: Check Files & Build APK
         run: |
-          # On ajoute --yes pour répondre automatiquement "OUI" aux questions d'installation
-          flet build apk --yes --skip-flutter-doctor
+          # 1. Affiche la liste des fichiers pour voir où est le main.py
+          echo "=== Contenu du dépôt ==="
+          ls -la
+          
+          # 2. Lancement du build en spécifiant explicitement le point d'entrée
+          flet build apk --yes --skip-flutter-doctor --module-name main
         env:
-          CI: "true" # Cette variable force souvent les outils à rester non-interactifs
+          CI: "true"
 
       - name: Upload APK
         uses: actions/upload-artifact@v4
