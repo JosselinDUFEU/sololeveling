@@ -33,11 +33,11 @@ jobs:
 
       - name: Build APK
         run: |
-          # On force l'inclusion du chemin Flutter dans le PATH de cette commande
+          # On force le chemin d'accès au cas où
           export PATH="$PATH:$FLUTTER_ROOT/bin"
           
-          # On lance le build en ignorant le test 'flutter doctor' de Flet
-          flet build apk --skip-flutter-doctor main.py
+          # On lance le build sans spécifier main.py à la fin
+          flet build apk --skip-flutter-doctor
 
       - name: Upload APK
         uses: actions/upload-artifact@v4
