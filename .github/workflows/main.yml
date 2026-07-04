@@ -33,20 +33,23 @@ jobs:
 
       - name: Create Flutter Project & Build
         run: |
-          # 1. On demande à Flet de générer le projet Flutter natif (sans lancer le build apk lourd)
-          flet pack main.py --output build_flutter
+          # 1. Génération du template Flutter propre à Flet
+          flet build template
           
-          # 2. On entre dans le projet Flutter généré
-          cd build_flutter
+          # 2. Copie de ton code Python dans le dossier de build créé par Flet
+          mkdir -p build/apk
+          cp main.py build/apk/
           
-          # 3. On récupère les paquets Flutter requis
+          # 3. Entrer dans le dossier généré
+          # Flet crée généralement un dossier temporaire ou un dossier build. 
+          # On laisse Flutter compiler directement via la commande standard de build de Flet mais restreinte.
           flutter pub get
           
-          # 4. C'est Flutter qui compile l'APK directement !
+          # 4. Compilation directe par Flutter
           flutter build apk --release
 
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
           name: app-release-apk
-          path: build_flutter/build/app/outputs/flutter-apk/app-release.apk
+          path: build/app/outputs/flutter-apk/app-release.apk
