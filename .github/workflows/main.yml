@@ -31,25 +31,16 @@ jobs:
         run: |
           pip install flet
 
-      - name: Create Flutter Project & Build
+      - name: Build APK
         run: |
-          # 1. Génération du template Flutter propre à Flet
-          flet build template
+          # On force l'inclusion du chemin Flutter dans le PATH de cette commande
+          export PATH="$PATH:$FLUTTER_ROOT/bin"
           
-          # 2. Copie de ton code Python dans le dossier de build créé par Flet
-          mkdir -p build/apk
-          cp main.py build/apk/
-          
-          # 3. Entrer dans le dossier généré
-          # Flet crée généralement un dossier temporaire ou un dossier build. 
-          # On laisse Flutter compiler directement via la commande standard de build de Flet mais restreinte.
-          flutter pub get
-          
-          # 4. Compilation directe par Flutter
-          flutter build apk --release
+          # On lance le build en ignorant le test 'flutter doctor' de Flet
+          flet build apk --skip-flutter-doctor main.py
 
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
           name: app-release-apk
-          path: build/app/outputs/flutter-apk/app-release.apk
+          path: build/apk/*.apk
