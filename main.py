@@ -3,7 +3,7 @@ import json
 import os
 import math
 import time
-from datetime import datetime
+from datetime import datetime, timedelta
 
 FICHIER_SAUVEGARDE = "data_solo_leveling.json"
 
@@ -75,7 +75,8 @@ def main(page: ft.Page):
             else:
                 facteur_du_jour = paliers_tries[-1][1]
             xp_calculee *= facteur_du_jour
-        return math.ceil(xp_calculee)
+            
+        return round(xp_calculee, 1)
 
     def parser_paliers_texte(texte):
         if not texte or not texte.strip():
@@ -215,7 +216,7 @@ def main(page: ft.Page):
                 "titre": titre_nettoye,
                 "type": "Classique",
                 "jours_cible": int(dropdown_frequence_classique.value),
-                "base_xp": int(txt_xp_classique.value) if txt_xp_classique.value.isdigit() else 10,
+                "base_xp": float(txt_xp_classique.value) if txt_xp_classique.value.replace('.', '', 1).isdigit() else 10.0,
                 "paliers": liste_paliers,
                 "streak": 0,
                 "derniere_validation": "", 
@@ -235,10 +236,12 @@ def main(page: ft.Page):
                 "sport": dropdown_sport_km.value,
                 "km_cible": target_km,
                 "km_actuel": 0.0,
-                "base_xp": int(txt_xp_bonus_km.value) if txt_xp_bonus_km.value.isdigit() else 50,
+                "base_xp": float(txt_xp_bonus_km.value) if txt_xp_bonus_km.value.replace('.', '', 1).isdigit() else 50.0,
                 "paliers": liste_paliers,
                 "streak": 0,
-                "derniere_semaine_annee": datetime.now().isocalendar()[1]
+                "derniere_semaine_annee": datetime.now().isocalendar()[1],
+                "nouveau_km_cible": None,
+                "nouveau_base_xp": None
             }
         
         donnees["quetes"].append(nouvelle_q)
@@ -249,7 +252,6 @@ def main(page: ft.Page):
         txt_xp_classique.value = "10"
         btn_creer.disabled = False
         
-        # LA PARADE ABSOLUE : On rase TOUTE l'interface et on la reconstruit proprement
         page.controls.clear() 
         page.add(
             ft.Column([
@@ -317,6 +319,11 @@ def main(page: ft.Page):
 
         if quete.get("derniere_semaine_annee", 0) != semaine_actuelle:
             quete["validations_semaine"] = 0
+            if quete.get("nouveau_km_cible") is not None:
+                quete["km_cible"] = quete["nouveau_km_cible"]
+                quete["base_xp"] = quete["nouveau_base_xp"]
+                quete["nouveau_km_cible"] = None
+                quete["nouveau_base_xp"] = None
             quete["derniere_semaine_annee"] = semaine_actuelle
 
         if quete.get("derniere_validation", "") == date_str:
@@ -359,6 +366,42 @@ def main(page: ft.Page):
         rafraichir_header_xp()
         rafraichir_liste_quetes()
 
+    # --- NOVEDADE : POPUP DE MODIFICATION DE L'OBJECTIF HEBDO POUR LA SEMAINE PROCHAINE ---
+    def proposer_changement_objectif(quete):
+        txt_nouveau_km = ft.TextField(label="Nouveau quota (km)", value=str(quete.get("km_cible", 30.0)), keyboard_type=ft.KeyboardType.NUMBER)
+        txt_nouvel_xp = ft.TextField(label="Nouvel XP Bonus", value=str(quete.get("base_xp", 50.0)), keyboard_type=ft.KeyboardType.NUMBER)
+
+        def enregistrer_changement(ev):
+            try:
+                nouveau_km = float(txt_nouveau_km.value.replace(",", "."))
+                nouvel_xp = float(txt_nouvel_xp.value.replace(",", "."))
+                if nouveau_km > 0 and nouvel_xp >= 0:
+                    quete["nouveau_km_cible"] = nouveau_km
+                    quete["nouveau_base_xp"] = nouvel_xp
+                    sauvegarder_donnees_globales(donnees)
+                    page.overlay.append(ft.SnackBar(ft.Text("⏳ Évolution programmée pour la semaine prochaine !"), bgcolor="#00FF88"))
+                    page.overlay[-1].open = True
+            except ValueError:
+                pass
+            dialog_evo.open = False
+            page.update()
+
+        dialog_evo = ft.AlertDialog(
+            title=ft.Text("Évolution de l'objectif 📈"),
+            content=ft.Column([
+                ft.Text("Félicitations pour avoir validé ta quête ! Veux-tu ajuster la difficulté pour la semaine prochaine ?", size=13),
+                txt_nouveau_km,
+                txt_nouvel_xp
+            ], spacing=10, height=180),
+            actions=[
+                ft.TextButton("Garder le même", on_click=lambda _: setattr(dialog_evo, "open", False) or page.update()),
+                ft.TextButton("Planifier", on_click=enregistrer_changement)
+            ]
+        )
+        page.overlay.append(dialog_evo)
+        dialog_evo.open = True
+        page.update()
+
     def ajouter_km_objectif_hebdo(e, quete):
         txt_ajout = ft.TextField(label="Distance effectuée (km)", keyboard_type=ft.KeyboardType.NUMBER)
         
@@ -374,11 +417,13 @@ def main(page: ft.Page):
                     ratio = 1.0 if quete.get("sport") == "Course à pied" else 0.25
                     xp_gagne = val * ratio
                     
+                    declencher_choix_evolution = False
                     if quete["km_actuel"] >= km_c and ancien_km < km_c:
                         futur_streak = quete.get("streak", 0) + 1
                         quete["streak"] = futur_streak
                         xp_bonus = calculer_xp_multi_plateaux(quete, futur_streak)
                         xp_gagne += xp_bonus
+                        declencher_choix_evolution = True
                         
                         page.overlay.append(ft.SnackBar(ft.Text(f"🎯 QUÊTE HEBDO RÉUSSIE ! Série : {futur_streak} sem."), bgcolor="#FF8C00"))
                         page.overlay[-1].open = True
@@ -388,6 +433,9 @@ def main(page: ft.Page):
                     sauvegarder_donnees_globales(donnees)
                     rafraichir_header_xp()
                     rafraichir_liste_quetes()
+                    
+                    if declencher_choix_evolution:
+                        proposer_changement_objectif(quete)
             except ValueError:
                 pass
             dialog.open = False
@@ -406,26 +454,68 @@ def main(page: ft.Page):
         page.update()
 
     def supprimer_quete(e, quete):
+        def confirmer_suppression(ev):
+            global donnees
+            donnees["quetes"].remove(quete)
+            sauvegarder_donnees_globales(donnees)
+            dialog_confirm.open = False
+            rafraichir_liste_quetes()
+            page.update()
+
+        dialog_confirm = ft.AlertDialog(
+            title=ft.Text("Abandonner l'objectif ?"),
+            content=ft.Text(f"Es-tu sûr de vouloir supprimer définitivement la quête : \n\"{quete.get('titre')}\" ?"),
+            actions=[
+                ft.TextButton("Annuler", on_click=lambda _: setattr(dialog_confirm, "open", False) or page.update()),
+                ft.TextButton("Supprimer", icon=ft.Icons.DELETE_FOREVER, icon_color="#FF4C4C", on_click=confirmer_suppression)
+            ],
+            actions_alignment=ft.MainAxisAlignment.END
+        )
+        page.overlay.append(dialog_confirm)
+        dialog_confirm.open = True
+        page.update()
+
+    def reorganiser_quetes(e):
         global donnees
-        donnees["quetes"].remove(quete)
+        quete_deplacee = donnees["quetes"].pop(e.old_index)
+        donnees["quetes"].insert(e.new_index, quete_deplacee)
         sauvegarder_donnees_globales(donnees)
         rafraichir_liste_quetes()
 
     # --- 7. AFFICHAGE DES QUÊTES ACTIVES ---
-    liste_visuelle_quetes = ft.ListView(height=450, spacing=10, scroll=ft.ScrollMode.AUTO)
+    liste_visuelle_quetes = ft.ReorderableListView(
+        height=450, 
+        spacing=10, 
+        scroll=ft.ScrollMode.AUTO,
+        on_reorder=reorganiser_quetes
+    )
 
     def rafraichir_liste_quetes():
         global donnees
         liste_visuelle_quetes.controls = []
         
-        if not donnees.get("quetes") or len(donnees["quetes"]) == 0:
-            liste_visuelle_quetes.controls.append(ft.Text("Aucune quête active. Crée-en une !", color="#A9A9A9", italic=True))
-            page.update()
-            return
-
         aujourdhui = datetime.now()
         date_aujourdhui_str = aujourdhui.strftime("%Y-%m-%d")
         semaine_actuelle = aujourdhui.isocalendar()[1]
+        
+        sauvegarde_requise = False
+        for q in donnees.get("quetes", []):
+            if q.get("type") == "Classique" and q.get("derniere_validation"):
+                try:
+                    derniere_date = datetime.strptime(q["derniere_validation"], "%Y-%m-%d")
+                    if (aujourdhui - derniere_date).days > 1:
+                        q["streak"] = 0
+                        sauvegarde_requise = True
+                except ValueError:
+                    pass
+                    
+        if sauvegarde_requise:
+            sauvegarder_donnees_globales(donnees)
+
+        if not donnees.get("quetes") or len(donnees["quetes"]) == 0:
+            liste_visuelle_quetes.controls.append(ft.Text("Aucune quête active. Crée-en une !", color="#A9A9A9", italic=True, key="empty_list"))
+            page.update()
+            return
 
         nouveaux_controles = []
         titres_vus = set()
@@ -436,14 +526,25 @@ def main(page: ft.Page):
                 continue
             titres_vus.add(t_key)
 
+            cle_unique = f"key_{t_key}_{q.get('type')}"
+
+            # GESTION DU CHANGEMENT DE SEMAINE ET INTÉGRATION DE LA MODIFICATION PLANIFIÉE
             if q.get("derniere_semaine_annee", 0) != semaine_actuelle:
                 if q.get("type") == "ObjectifKmHebdo":
                     if q.get("km_actuel", 0.0) < q.get("km_cible", 30.0):
                         q["streak"] = 0
                     q["km_actuel"] = 0.0
+                    
+                    # Si une évolution avait été planifiée, on la valide maintenant
+                    if q.get("nouveau_km_cible") is not None:
+                        q["km_cible"] = q["nouveau_km_cible"]
+                        q["base_xp"] = q["nouveau_base_xp"]
+                        q["nouveau_km_cible"] = None
+                        q["nouveau_base_xp"] = None
                 else:
                     q["validations_semaine"] = 0
                 q["derniere_semaine_annee"] = semaine_actuelle
+                sauvegarder_donnees_globales(donnees)
 
             if q.get("type") == "ObjectifKmHebdo":
                 km_a = q.get("km_actuel", 0.0)
@@ -452,23 +553,28 @@ def main(page: ft.Page):
                 progression = min(km_a / km_c, 1.0) if km_c > 0 else 0.0
                 
                 streak_actuel = q.get("streak", 0)
-                xp_affichage_bonus = calculer_xp_multi_plateaux(q, streak_actuel if complete else streak_actuel + 1)
+                xp_affichage_bonus = calculer_xp_multi_plateaux(q, streak_actuel + 1)
                 
                 barre_orange = ft.ProgressBar(value=progression, color="#FF8C00", bgcolor="#0B0C10", height=6, border_radius=3)
                 icon_sport = "🏃‍♂️" if q.get("sport") == "Course à pied" else "🚴‍♂️"
-                sub_txt = f"{icon_sport} Hebdo : {round(km_a, 1)} / {km_c} km | +{xp_affichage_bonus} XP"
+                
+                # Petit indicateur visuel si un changement est en attente
+                txt_evo_attente = " ⏳" if q.get("nouveau_km_cible") is not None else ""
+                sub_txt = f"{icon_sport} Hebdo : {round(km_a, 1)} / {km_c} km | +{xp_affichage_bonus} XP{txt_evo_attente}"
 
                 nouveaux_controles.append(
                     ft.Container(
+                        key=cle_unique,
                         content=ft.Column([
                             ft.Row([
+                                ft.IconButton(ft.Icons.DELETE_OUTLINE, icon_color="#FF4C4C", on_click=lambda e, quete=q: supprimer_quete(e, quete)),
                                 ft.Column([ft.Text(q["titre"], color="#FFFFFF", weight=ft.FontWeight.BOLD), ft.Text(sub_txt, color="#A9A9A9", size=11)], expand=True),
                                 ft.Container(content=ft.Text(f"🔥 {streak_actuel}", color="#FF8C00", weight=ft.FontWeight.BOLD, size=12), bgcolor="#0B0C10", padding=5, border_radius=5),
                                 ft.ElevatedButton("Fini 🎉" if complete else "+ Km", disabled=complete, on_click=lambda e, quete=q: ajouter_km_objectif_hebdo(e, quete)),
-                                ft.IconButton(ft.Icons.DELETE_OUTLINE, icon_color="#FF4C4C", on_click=lambda e, quete=q: supprimer_quete(e, quete))
-                            ]),
+                                ft.Icon(ft.Icons.DRAG_HANDLE, color="#4B0082", size=18)
+                            ], vertical_alignment=ft.CrossAxisAlignment.CENTER),
                             ft.Container(content=barre_orange, padding=5)
-                        ]), bgcolor="#1F2833", padding=10, border_radius=8
+                        ]), bgcolor="#1F2833", padding=12, border_radius=8
                     )
                 )
             else:
@@ -476,7 +582,8 @@ def main(page: ft.Page):
                 val_semaine = q.get("validations_semaine", 0)
                 dern_val = q.get("derniere_validation", "")
                 streak_actuel = q.get("streak", 0)
-                xp_affichage = calculer_xp_multi_plateaux(q, streak_actuel + 1 if (dern_val != date_aujourdhui_str) else streak_actuel)
+                
+                xp_affichage = calculer_xp_multi_plateaux(q, streak_actuel + 1)
 
                 deja_fait = (dern_val == date_aujourdhui_str)
                 quota_atteint = (val_semaine >= cible and cible != 7)
@@ -495,12 +602,14 @@ def main(page: ft.Page):
 
                 nouveaux_controles.append(
                     ft.Container(
+                        key=cle_unique,
                         content=ft.Row([
+                            ft.IconButton(ft.Icons.DELETE_OUTLINE, icon_color="#FF4C4C", on_click=lambda e, quete=q: supprimer_quete(e, quete)),
                             ft.Column([ft.Text(q["titre"], color="#FFFFFF", weight=ft.FontWeight.BOLD), ft.Text(f"⏱️ {freq_txt} | 💎 {xp_affichage} XP", color="#A9A9A9", size=11)], expand=True),
                             ft.Container(content=ft.Text(f"🔥 {streak_actuel}", color="#FF8C00", weight=ft.FontWeight.BOLD, size=12), bgcolor="#0B0C10", padding=5, border_radius=5),
                             ft.ElevatedButton(btn_texte, bgcolor=btn_fond, disabled=bloque, on_click=action),
-                            ft.IconButton(ft.Icons.DELETE_OUTLINE, icon_color="#FF4C4C", on_click=lambda e, quete=q: supprimer_quete(e, quete))
-                        ]), bgcolor="#1F2833", padding=10, border_radius=8
+                            ft.Icon(ft.Icons.DRAG_HANDLE, color="#4B0082", size=18)
+                        ], vertical_alignment=ft.CrossAxisAlignment.CENTER), bgcolor="#1F2833", padding=12, border_radius=8
                     )
                 )
         
@@ -554,7 +663,6 @@ def main(page: ft.Page):
 
     espace_encoche = ft.Container(height=30, bgcolor=ft.Colors.TRANSPARENT)
 
-    # Premier affichage initial
     page.add(
         ft.Column([
             espace_encoche,
